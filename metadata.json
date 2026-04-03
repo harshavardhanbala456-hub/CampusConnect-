@@ -1,0 +1,5 @@
+{
+  "name": "CampusConnect Announcements",
+  "description": "A centralized web application for university announcements, allowing admins to post updates and students to view them based on department and year.",
+  "requestFramePermissions": []
+}
