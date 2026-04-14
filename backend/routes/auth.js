@@ -1,4 +1,4 @@
-// backend/routes/auth.js — Register, Login, Me
+// backend/routes/auth.js — Register, Login, Me (Supabase integration)
 const express  = require('express');
 const bcrypt   = require('bcryptjs');
 const jwt      = require('jsonwebtoken');
@@ -33,10 +33,15 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'name, email, password, and role are required.' });
     }
 
-    const db = await getDb();
+    const supabase = await getDb();
 
     // Check duplicate email
-    const existing = await db.get('SELECT id FROM users WHERE email = ?', [email]);
+    const { data: existing } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', email)
+      .maybeSingle();
+
     if (existing) {
       return res.status(409).json({ error: 'An account with this email already exists.' });
     }
@@ -44,25 +49,36 @@ router.post('/register', async (req, res) => {
     const password_hash = await bcrypt.hash(password, 12);
     const id = crypto.randomUUID();
 
-    await db.run(
-      `INSERT INTO users (id, name, email, password_hash, role, department, year)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [
-        id,
-        name,
-        email,
-        password_hash,
-        role === 'admin' ? 'admin' : 'student',
-        department || null,
-        year || null,
-      ]
-    );
+    const { error: insertError } = await supabase
+      .from('users')
+      .insert([
+        {
+          id,
+          name,
+          email,
+          password_hash,
+          role: role === 'admin' ? 'admin' : 'student',
+          department: department || null,
+          year: year || null,
+        }
+      ]);
+
+    if (insertError) {
+      throw insertError;
+    }
 
     // Fetch the newly created user
-    const user = await db.get('SELECT * FROM users WHERE id = ?', [id]);
-    const token = signToken(user);
+    const { data: user } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', id)
+      .single();
 
-    return res.status(201).json({ token, user: { ...user, password_hash: undefined } });
+    const token = signToken(user);
+    const safeUser = { ...user };
+    delete safeUser.password_hash;
+
+    return res.status(201).json({ token, user: safeUser });
   } catch (err) {
     console.error('Register error:', err);
     return res.status(500).json({ error: 'Server error during registration.' });
@@ -77,10 +93,15 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Email and password are required.' });
     }
 
-    const db = await getDb();
-    const user = await db.get('SELECT * FROM users WHERE email = ?', [email]);
+    const supabase = await getDb();
+    
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', email)
+      .maybeSingle();
 
-    if (!user) {
+    if (!user || error) {
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
 
@@ -101,12 +122,16 @@ router.post('/login', async (req, res) => {
 // ─── GET /api/auth/me ────────────────────────────────────────────────────────
 router.get('/me', requireAuth, async (req, res) => {
   try {
-    const db = await getDb();
-    const user = await db.get(
-      'SELECT id, name, email, role, department, year, created_at FROM users WHERE id = ?',
-      [req.user.id]
-    );
-    if (!user) return res.status(404).json({ error: 'User not found.' });
+    const supabase = await getDb();
+    
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('id, name, email, role, department, year, created_at')
+      .eq('id', req.user.id)
+      .maybeSingle();
+
+    if (!user || error) return res.status(404).json({ error: 'User not found.' });
+    
     return res.json({ user });
   } catch (err) {
     console.error('Me error:', err);

@@ -1,36 +1,34 @@
-// backend/db.js — SQLite connection
-const sqlite3 = require('sqlite3');
-const { open } = require('sqlite');
-const fs = require('fs');
-const path = require('path');
+// backend/db.js — Supabase connection setup
 require('dotenv').config();
+const { createClient } = require('@supabase/supabase-js');
 
-let dbInstance = null;
-
-async function getDb() {
-  if (dbInstance) return dbInstance;
-  
-  dbInstance = await open({
-    filename: path.join(__dirname, 'database.sqlite'),
-    driver: sqlite3.Database
-  });
-
-  // Enable foreign keys
-  await dbInstance.run('PRAGMA foreign_keys = ON');
-
-  // Auto-initialize schema if needed
-  try {
-    const schemaFiles = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
-    await dbInstance.exec(schemaFiles);
-    console.log('✅  SQLite connected and schema initialized.');
-  } catch (err) {
-    console.error('❌  SQLite schema initialization failed:', err.message);
-  }
-
-  return dbInstance;
+if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  console.error("❌ SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY environment variables are missing.");
+  process.exit(1);
 }
 
-// Test connectivity on startup and export a promise so routes can await getDb()
-getDb();
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
+async function getDb() {
+  return supabase;
+}
+
+// Test connectivity on startup
+async function testConnection() {
+  try {
+    const { data, error } = await supabase.from('users').select('id').limit(1);
+    if (error) {
+      console.error('❌ Supabase connection or schema check failed:', error.message);
+    } else {
+      console.log('✅ Supabase connected successfully.');
+    }
+  } catch (err) {
+    console.error('❌ Supabase connection failed:', err.message);
+  }
+}
+testConnection();
 
 module.exports = { getDb };

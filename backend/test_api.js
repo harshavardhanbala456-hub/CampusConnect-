@@ -775,7 +775,7 @@ function printSummary() {
   await testComments();
   await testDeleteAnnouncement();
   await testFallback();
-  await testDatabase();
+  // await testDatabase(); // Removed SQLite testing
   await testFrontendConfig();
 
   printSummary();

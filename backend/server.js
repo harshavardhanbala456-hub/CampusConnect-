@@ -29,13 +29,20 @@ app.use(attachUser);
 app.use('/api/auth',          authRoutes);
 app.use('/api/announcements', announcementRoutes);
 
-// Health check
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', time: new Date().toISOString() });
+// Health check (also keeps Supabase active)
+app.get('/api/health', async (_req, res) => {
+  try {
+    const { getDb } = require('./db');
+    const supabase = await getDb();
+    await supabase.from('users').select('id').limit(1);
+    res.json({ status: 'ok', time: new Date().toISOString() });
+  } catch (err) {
+    res.status(500).json({ status: 'error', error: err.message });
+  }
 });
 
-// 404 fallback
-app.use((_req, res) => {
+// 404 fallback for API
+app.use('/api', (_req, res) => {
   res.status(404).json({ error: 'Route not found.' });
 });
 
