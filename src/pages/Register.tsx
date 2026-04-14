@@ -31,7 +31,7 @@ export default function Register() {
       });
       navigate('/dashboard');
     } catch (err: any) {
-      setError(err.message || 'Failed to create an account');
+      setError(err.response?.data?.error || err.message || 'Failed to create an account. Please check your connection.');
     } finally {
       setLoading(false);
     }

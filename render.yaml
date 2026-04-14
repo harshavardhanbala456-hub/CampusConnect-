@@ -1,0 +1,26 @@
+# ─── Render Deployment Config ─────────────────────────────────────────────────
+# This file automates deployment on Render.
+# To deploy: connect your GitHub repository to Render and it will auto-detect this file.
+
+services:
+  - type: web
+    name: campusconnect-unified
+    env: node
+    plan: free
+    
+    # ─── Build & Start Commands ───
+    # npm install grabs frontend deps
+    # npm run build triggers prebuild (installs backend deps) then builds frontend
+    buildCommand: npm install && npm run build
+    
+    # npm start runs 'cd backend && node server.js'
+    startCommand: npm start
+    
+    # ─── Environment Variables ───
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: RENDER_EXTERNAL_URL
+        sync: false

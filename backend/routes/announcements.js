@@ -66,53 +66,69 @@ router.get('/', requireAuth, async (req, res) => {
 });
 
 // ─── POST /api/announcements — Admin only ───────────────────────────────────
-router.post('/', requireAuth, requireAdmin, upload.single('pdf'), async (req, res) => {
-  try {
-    const { title, description, department, year, category } = req.body;
-    if (!title || !description) {
-      return res.status(400).json({ error: 'Title and description are required.' });
+router.post(
+  '/',
+  requireAuth,
+  requireAdmin,
+  // Wrap upload so multer errors reach our error-handler below (not the global 500 handler)
+  (req, res, next) => upload.single('pdf')(req, res, (err) => {
+    if (err) return next(err); // hand off to the multer error handler below
+    next();
+  }),
+  async (req, res) => {
+    try {
+      const { title, description, department, year, category } = req.body;
+      if (!title || !description) {
+        return res.status(400).json({ error: 'Title and description are required.' });
+      }
+
+      const pdfBuffer  = req.file ? req.file.buffer        : null;
+      const pdfName    = req.file ? req.file.originalname   : null;
+      const pdfMime    = req.file ? req.file.mimetype       : null;
+      const id         = crypto.randomUUID();
+
+      const db = await getDb();
+      await db.run(
+        `INSERT INTO announcements
+           (id, title, description, pdf_data, pdf_name, pdf_mime, department, year, category, author_id, author_name)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          id, title, description,
+          pdfBuffer, pdfName, pdfMime,
+          department || 'All',
+          year       || 'All',
+          category   || 'Academic',
+          req.user.id,
+          req.user.name,
+        ]
+      );
+
+      // Return all announcements so frontend stays in sync
+      const rows = await db.all(
+        `SELECT id, title, description, pdf_data, pdf_name, pdf_mime,
+                department, year, category, author_id, author_name, created_at
+         FROM announcements ORDER BY created_at DESC`
+      );
+      const result = await attachComments(rows);
+      return res.status(201).json({ announcements: result });
+    } catch (err) {
+      console.error('Post announcement error:', err);
+      return res.status(500).json({ error: err.message || 'Failed to post announcement.' });
     }
-
-    const pdfBuffer  = req.file ? req.file.buffer   : null;
-    const pdfName    = req.file ? req.file.originalname : null;
-    const pdfMime    = req.file ? req.file.mimetype  : null;
-    const id         = crypto.randomUUID();
-
-    const db = await getDb();
-    await db.run(
-      `INSERT INTO announcements
-         (id, title, description, pdf_data, pdf_name, pdf_mime, department, year, category, author_id, author_name)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        id,
-        title,
-        description,
-        pdfBuffer,
-        pdfName,
-        pdfMime,
-        department || 'All',
-        year       || 'All',
-        category   || 'Academic',
-        req.user.id,
-        req.user.name,
-      ]
-    );
-
-    // Return all announcements so frontend stays in sync
-    const rows = await db.all(
-      `SELECT id, title, description, pdf_data, pdf_name, pdf_mime,
-              department, year, category, author_id, author_name, created_at
-       FROM announcements ORDER BY created_at DESC`
-    );
-    const result = await attachComments(rows);
-    return res.status(201).json({ announcements: result });
-  } catch (err) {
-    console.error('Post announcement error:', err);
-    if (err.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({ error: 'PDF file must be less than 2 MB.' });
-    }
-    return res.status(500).json({ error: err.message || 'Failed to post announcement.' });
   }
+);
+
+// ─── Multer / file-upload error handler (scoped to this router) ──────────────
+// eslint-disable-next-line no-unused-vars
+router.use((err, _req, res, _next) => {
+  if (err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(400).json({ error: 'PDF file must be less than 2 MB.' });
+  }
+  if (err.message === 'Only PDF files are allowed.') {
+    return res.status(400).json({ error: 'Only PDF files are allowed.' });
+  }
+  console.error('Announcements router error:', err);
+  return res.status(500).json({ error: err.message || 'Internal server error.' });
 });
 
 // ─── DELETE /api/announcements/:id — Admin only ─────────────────────────────

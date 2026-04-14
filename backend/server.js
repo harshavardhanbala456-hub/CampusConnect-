@@ -39,7 +39,18 @@ app.use((_req, res) => {
   res.status(404).json({ error: 'Route not found.' });
 });
 
-// Global error handler
+// ─── Serve Frontend ────────────────────────────────────────────────────────────
+// In production, serve the built Vite/React assets from the root 'dist' directory
+const path = require('path');
+const distPath = path.join(__dirname, '../dist');
+app.use(express.static(distPath));
+
+// For any route not caught by our API endpoints, send the React index.html
+app.get('*', (_req, res) => {
+  res.sendFile(path.join(distPath, 'index.html'));
+});
+
+// ─── Global Error Handler ────────────────────────────────────────────────────
 app.use((err, _req, res, _next) => {
   console.error('Unhandled error:', err);
   res.status(500).json({ error: err.message || 'Internal server error.' });
@@ -48,4 +59,15 @@ app.use((err, _req, res, _next) => {
 // ─── Start ───────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`🚀  CampusConnect API running at http://localhost:${PORT}`);
+  
+  // ─── 24/7 Keep-Awake Self-Ping ──────────────────────────────────────────────
+  // Render's free tier sleeps apps after 15 minutes of inactivity.
+  // This thread pings the health endpoint every 14 minutes to trick it into staying awake.
+  const siteUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
+  console.log(`⏱️   Keep-awake ping thread started (Target: ${siteUrl}/api/health)`);
+  setInterval(() => {
+    fetch(`${siteUrl}/api/health`)
+      .then(res => console.log(`[Keep-Awake] Heartbeat status: ${res.status} at ${new Date().toISOString()}`))
+      .catch(err => console.error(`[Keep-Awake] Heartbeat failed:`, err.message));
+  }, 14 * 60 * 1000); // 14 minutes
 });

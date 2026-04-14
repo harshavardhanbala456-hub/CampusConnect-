@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
+    "prebuild": "cd backend && npm install",
+    "start": "cd backend && node server.js",
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "npx tsc --noEmit"

@@ -20,7 +20,7 @@ export default function Login() {
       await login(email, password);
       navigate('/dashboard');
     } catch (err: any) {
-      setError(err.message || 'Failed to log in');
+      setError(err.response?.data?.error || err.message || 'Failed to log in. Please check your connection.');
     } finally {
       setLoading(false);
     }
